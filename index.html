@@ -1,0 +1,24 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <script src="serial.js"></script>
+</head>
+<body>
+    <h1>Commands To Send</h1>
+    <textarea type="text" id="toWriteText" placeholder="输入""></textarea>
+    <h1>.....</h1>
+    <button onclick="send()">Send</button>
+    <button onclick="connectSerial()">Open</button>
+    <button onclick="closeSerial()">Close</button>
+    <h1>Device List</h1>
+    <textarea type="text" id="fromSerialText" placeholder="输入" ></textarea>"
+    <h1>......</h1>
+    <button onclick="disConnectAll()">disConnectAll</button>
+    <h1>...........</h1>
+    <button onclick="getPorts()">Get Ports</button>
+</body>
+
+</html>

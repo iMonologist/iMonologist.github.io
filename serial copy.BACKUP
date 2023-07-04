@@ -1,0 +1,210 @@
+//@ts-ignore
+var Serial = navigator.serial
+var toWriteText:HTMLTextAreaElement
+var fromSerialText:HTMLTextAreaElement
+class LineBreakTransformer {
+    container=''
+    constructor() {
+      this.container = '';
+    }
+  
+    transform(chunk: string, controller: { enqueue: (arg0: string) => void; }) {
+      this.container += chunk;
+      const lines = this.container.split('\r\n');
+      this.container = lines.pop();
+      lines.forEach(line => controller.enqueue(line));
+    }
+  
+    flush(controller: { enqueue: (arg0: string) => void; }) {
+      controller.enqueue(this.container);
+    }
+}
+class SerialPortManagerClass{
+    ports:any
+    serials=new Map<any,SerialPort>()
+    current:SerialPort
+    getSerial(port:any,force=false):SerialPort{
+        if (this.serials.has(port))
+        {
+            return this.serials.get(port)
+        }
+        else{
+            if(force){
+                const serial= new SerialPort()
+                serial.port = port
+                serial.manager=this
+                this.serials.set(port,serial)
+                return serial
+            }
+            return null
+        }
+    }
+    onGetDevices(ports: any) {
+        this.ports=ports
+        ports.forEach((port:any, index:any) => console.log(index, ":", port.getInfo()));
+    }
+    queryDevices(){
+        //@ts-ignore
+        //Serial.getPorts().then(this.onGetDevices.bind(this));
+        var e=this
+        //@ts-ignore
+        navigator.serial.getPorts().then((ports) => {
+            // Initialize the list of available ports with `ports` on page load.
+            e.ports=ports
+            ports.forEach((port:any, index:any) =>this.getSerial(port,true))
+            console.log(ports,this.serials)
+          });
+        console.log('queryDevices')
+    }
+    onConnect(e: any){
+    }
+    onDisconnect(e: any){
+    }
+    prepare(){
+        Serial.addEventListener("connect",this.onConnect.bind(this))       
+        Serial.addEventListener("disconnect",this.onConnect.bind(this))
+    }    
+    async connectSerial() {
+        try {
+            // Prompt user to select any serial port.
+            //@ts-ignore
+            const port = await Serial.requestPort();
+            var asp = this.getSerial(port)
+            if(asp) return
+            asp = this.getSerial(port,true)
+            this.current=asp
+            asp.connect()
+        } catch {
+            alert("Serial Connection Failed");
+        }
+    }
+    disConnectAll(){
+        for(let kv of this.serials){
+            kv[1].disConnect()
+        } 
+        this.current=null
+        this.ports.length =0
+        this.serials.clear()
+    }
+}const SerialPortManager=new SerialPortManagerClass()
+class SerialPort{
+    manager:SerialPortManagerClass
+    options={baudRate:115200}//serialOptions
+    port:any
+    index=0
+    onLineReceived(line:string){
+        console.log('on line received',this.index,line)
+        this.index++
+    }
+    async write(line:string){
+        console.log('write:',line)//this.port)    
+        //var encoder = new TextEncoder()    
+        //var encoded =encoder.encode(line+'\n')
+        await this.writer.write(this.encoder.encode(line+'\n'))
+        //await this.writer.write(new TextEncoder().encode(line+'\n'))
+        //this.writer.releaseLock();
+        //console.info('write: ',line)
+    }
+    connect(){
+        /**https://developer.mozilla.org/en-US/docs/Web/API/SerialPort/open */
+         //this.port.open(this.options).then((e:any)=>console.log(e))
+         console.log('Connecting to serial port',this.port)
+         this.port.open(this.options).then(this.onConnect.bind(this),(e:any)=>console.log(e))
+    }      
+    async disConnect(force=true){
+        console.log(this.port)
+        if(force){
+            if (this.port.writable)
+                this.port.writable.getWriter().abort()
+        }
+        else
+            if (this.port.writable)
+                await this.port.writable.getWriter().close()
+        await this.port.close().then(this.onDisconnect.bind(this),(e:any)=>{console.log(e)})
+    }
+    onConnect() {
+        console.info('Connected to serial port')
+        //const textEncoder = new TextEncoderStream();
+        // this.writableStreamClosed = textEncoder.readable.pipeTo(this.port.writable);
+        //this.writer = textEncoder.writable.getWriter();
+        // writer.close();
+        //await writableStreamClosed;
+        // await port.close();
+        this.writer = this.port.writable.getWriter();
+        this.listenToPort()
+    }
+    inputStream:any
+    inputDone:any
+    decoder=new TextDecoderStream()
+    writer:any
+    encoder = new TextEncoder()
+    outputStream:any
+    outputDone:any
+    reader:any
+    async listenToPort() {
+        //const decoder = new TextDecoderStream()
+        
+        this.inputDone = this.port.readable.pipeTo(this.decoder.writable)
+        this.inputStream = this.decoder.readable.pipeThrough(
+            new TransformStream(new LineBreakTransformer())
+          ); 
+        this.reader = this.inputStream.getReader()
+
+        //this.reader = this.port.readable
+        //.pipeThrough(new TextDecoderStream())
+        //.pipeThrough(new TransformStream(new LineBreakTransformer()))
+        //.getReader();
+        // Listen to data coming from the serial device.
+        while (true) {
+            const { value, done } = await this.reader.read();
+            if (done) {
+                // Allow the serial port to be closed later.
+                this.reader.releaseLock();
+                break;
+            }
+            // value is a string.
+            this.onLineReceived(value);
+        }
+    }
+    onDisconnect () {
+          console.log("Disconnected from the serial port");
+    }
+}
+var prepared=false
+function prepare(){
+    if(!prepared) {
+        //@ts-ignore
+        toWriteText = document.getElementById('toWriteText')
+        //@ts-ignore
+        fromSerialText = document.getElementById('fromSerialText')
+        prepared=true
+    }
+}
+function connectSerial(){
+    prepare()
+    fromSerialText.textContent="Connecting to serial port"
+
+    SerialPortManager.connectSerial()
+}
+function getPorts(){
+    prepare()
+    SerialPortManager.queryDevices()
+}
+function send(){
+    prepare()
+    if( SerialPortManager.current)
+        SerialPortManager.current.write(toWriteText.value)
+}
+function disConnectAll(){
+    SerialPortManager.disConnectAll()
+    return  
+    //@ts-ignore
+    navigator.serial.getPorts().then((ports) => {
+        // Initialize the list of available ports with `ports` on page load.
+        for(let i =0;i<ports.length;i++){
+            console.log(i, ":", ports[i].getInfo());
+            ports[i].close()
+        }
+        console.log(ports)
+      });
+}
